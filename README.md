@@ -102,7 +102,7 @@ Since [passing session tags using AssumeRoleWithWebIdentity](https://docs.aws.am
 
 Instead, we use the [`github` context](https://docs.github.com/en/enterprise-cloud@latest/actions/learn-github-actions/contexts#github-context) to inject the repository identity into an [inline session policy](https://github.com/aws-actions/configure-aws-credentials#inline-session-policies).
 
-https://github.com/Skyscanner/gha-aws-oidc-sample/blob/main/.github/workflows/reusable-s3.yaml#L55-L89
+https://github.com/Skyscanner/gha-aws-oidc-sample/blob/2b8d2ee21067f7a8310443c6f428e18973614927/.github/workflows/reusable-s3.yaml#L55-L89
 
 This happens during a single call to [AssumeRoleWithWebIdentity](https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRoleWithWebIdentity.html), so we don't expect e.g., early crashes in our Reusable Workflow to be useful for privilege escalation.
 
@@ -121,7 +121,7 @@ We also use the `RoleSessionName` parameter ([on AssumeRoleWithWebIdentity](http
 
 In an effort to reduce the attack surface for our (initially) widely privileged IAM role, we make use of GitHub Actions OIDC IdP's [subject claim customisation](https://docs.github.com/en/enterprise-cloud@latest/actions/deployment/security-hardening-your-deployments/about-security-hardening-with-openid-connect#customizing-the-subject-claims-for-an-organization-or-repository) to indicate our Reusable Workflow's identity. This `job_workflow_ref` claim is then declared as a condition to our `AssumeRolePolicyDocument`.
 
-https://github.com/Skyscanner/gha-aws-oidc-sample/blob/main/cfn.yaml#L55-L66
+https://github.com/Skyscanner/gha-aws-oidc-sample/blob/2b8d2ee21067f7a8310443c6f428e18973614927/cfn.yaml#L53-L64
 
 
 ### Guarding against malicious forks
