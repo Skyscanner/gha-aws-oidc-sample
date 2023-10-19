@@ -1,0 +1,94 @@
+---
+# Copyright 2023 Skyscanner Limited.
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+# http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+AWSTemplateFormatVersion: 2010-09-09
+Description: Sample IAM roles for Github Actions
+
+Parameters:
+  GitHubOrg:
+    Type: String
+    Description: "Username for your GitHub.com organisation or personal account (example: `Skyscanner`)"
+  GitHubReusableWorkflow:
+    Type: String
+    Description: "Constraint for job_workflow_ref, should point to your Reusable Workflow (example: `Skyscanner/gha-aws-oidc-sample/.github/workflows/reusable-s3.yaml@*`)"
+
+Outputs:
+  StaticContentBucketName:
+    Description: Name of the created S3 bucket.
+    Value: !Ref StaticContentBucket
+  StaticContentRoleArn:
+    Description: ARN for the created IAM role.
+    Value: !GetAtt StaticContentRole.Arn
+
+Resources:
+  GithubOidc:
+    Type: AWS::IAM::OIDCProvider
+    Properties:
+      Url: https://token.actions.githubusercontent.com
+      ClientIdList:
+        - sts.amazonaws.com
+      ThumbprintList:
+        # not used for `token.actions.githubusercontent.com`
+        # see also: https://github.com/aws-actions/configure-aws-credentials#sample-iam-oidc-cloudformation-template
+        - ffffffffffffffffffffffffffffffffffffffff
+
+  StaticContentBucket:
+    Type: AWS::S3::Bucket
+
+  StaticContentRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Action: sts:AssumeRoleWithWebIdentity
+            Principal:
+              Federated: !Ref GithubOidc
+            Condition:
+              StringEquals:
+                token.actions.githubusercontent.com:aud: "sts.amazonaws.com"
+              StringLike:
+                token.actions.githubusercontent.com:sub: !Sub "repo:${GitHubOrg}/*:job_workflow_ref:${GitHubReusableWorkflow}"
+      Policies:
+        - PolicyName: ListStaticContent
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - s3:ListBucket
+                Resource: !GetAtt StaticContentBucket.Arn
+              - Effect: Allow
+                Action:
+                  - "ecr:GetAuthorizationToken"
+                Resource:
+                  - "*"
+        - PolicyName: PushStaticContent
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Action:
+                  - s3:GetObject
+                  - s3:GetObjectAcl
+                  - s3:GetObjectVersion
+                  - s3:PutObject
+                  - s3:PutObjectAcl
+                  - s3:DeleteObject
+                  - s3:DeleteObjectVersion
+                Effect: Allow
+                Resource:
+                  - !GetAtt StaticContentBucket.Arn
+                  - !Sub "${StaticContentBucket.Arn}/*"

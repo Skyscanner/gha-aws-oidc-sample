@@ -1,0 +1,107 @@
+---
+
+# Copyright 2023 Skyscanner Limited.
+
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+
+# http://www.apache.org/licenses/LICENSE-2.0
+
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Reusable Workflow for S3 uploads
+name: Upload to S3
+
+on:
+  workflow_call:
+    inputs:
+      dry-run:
+        required: false
+        type: boolean
+        description: Displays the operations that would be performed without actually running them.
+        default: false
+      artifact-name:
+        required: false
+        type: string
+        description: Name of the artifact to upload.
+        default: static-content
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  BUCKET: 'x'
+  ROLE_TO_ASSUME: 'arn:aws:iam::####:role/X'
+  REGION: 'x-x-#'
+
+jobs:
+  bucket-upload:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/github-script@v6
+        id: prepare-aws-role-session-name
+        with:
+          # https://docs.aws.amazon.com/STS/latest/APIReference/API_AssumeRoleWithWebIdentity.html
+          # RoleSessionName only permits [\w+=,.@-]*
+          script: return "GitHubActions," + context.repo.owner + "@" + context.repo.repo
+          result-encoding: string
+
+      - name: Login AWS
+        uses: aws-actions/configure-aws-credentials@v2.2.0
+        with:
+          role-to-assume: ${{ env.ROLE_TO_ASSUME }}
+          role-session-name: ${{ steps.prepare-aws-role-session-name.outputs.result }}
+          aws-region: ${{ env.REGION }}
+          mask-aws-account-id: 'no'
+          inline-session-policy: >-
+            {
+              "Version": "2012-10-17",
+              "Statement": [
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:ListBucket"
+                  ],
+                  "Resource": [
+                    "arn:aws:s3:::${{ env.BUCKET }}"
+                  ]
+                },
+                {
+                  "Effect": "Allow",
+                  "Action": [
+                    "s3:GetObject",
+                    "s3:GetObjectAcl",
+                    "s3:GetObjectVersion",
+                    "s3:PutObject",
+                    "s3:PutObjectAcl"
+                  ],
+                  "Resource": [
+                    "arn:aws:s3:::${{ env.BUCKET }}/${{ github.repository }}/*"
+                  ]
+                }
+              ]
+            }
+
+      
+      - name: "Debug: sts get-caller-identity"
+        run: |
+          aws sts get-caller-identity --output table --color on
+
+      - name: Download artifact
+        uses: actions/download-artifact@v3
+        with:
+          name: ${{ inputs.artifact-name }}
+          path: /tmp/bucket-upload/
+
+      - name: List content to be uploaded
+        run: ls /tmp/bucket-upload/
+
+      - name: Upload to S3 bucket
+        run: |
+          aws s3 cp ${{ inputs.dry-run && '--dryrun' || '' }} --recursive /tmp/bucket-upload/ s3://${{ env.BUCKET }}/${{ github.repository }}
